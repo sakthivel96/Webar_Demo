@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Unity WebAR</title>
+
+    <!-- Unity WebGL Loader -->
+    <script src="Build/WebAR.loader.js"></script>
+
+    <!-- Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+
+    <!-- MindAR (make sure this loads before use) -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.4/dist/mindar-image-three.prod.js"></script>
+
+    <style>
+      html, body {
+        margin: 0;
+        overflow: hidden;
+        height: 100%;
+        width: 100%;
+      }
+
+      #mindar-container {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      canvas {
+        width: 100% !important;
+        height: 100% !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="mindar-container">
+      <canvas id="unity-canvas"></canvas>
+    </div>
+
+    <script>
+      let unityInstance;
+
+      window.addEventListener('load', async () => {
+        // Initialize Unity WebGL
+        unityInstance = await createUnityInstance(document.querySelector("#unity-canvas"), {
+          dataUrl: "Build/WebAR.data",
+          frameworkUrl: "Build/WebAR.framework.js",
+          codeUrl: "Build/WebAR.wasm",
+        });
+
+        // Start MindAR once Unity is loaded
+        startMindAR();
+      });
+
+      // Initialize MindAR
+      async function startMindAR() {
+        // Check if MindAR is loaded
+        if (!window.MINDAR || !window.MINDAR.IMAGE) {
+          console.error("MindAR not loaded or image tracking module unavailable!");
+          return;
+        }
+
+        // Initialize MindAR for image tracking
+        const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+          container: document.querySelector("#mindar-container"),
+          imageTargetSrc: "./TargetFiles/targets.mind", // path to your .mind file
+        });
+
+        // Extract renderer, scene, and camera from MindAR instance
+        const { renderer, scene, camera } = mindarThree;
+
+        // Define number of image targets
+        const targetCount = 1; // Adjust for the number of targets in your .mind file
+        for (let i = 0; i < targetCount; i++) {
+          // Add anchor for each target
+          const anchor = mindarThree.addAnchor(i);
+
+          // Update target position and rotation
+          anchor.onTargetUpdate = () => {
+            const pos = new THREE.Vector3();
+            const quat = new THREE.Quaternion();
+            const scale = new THREE.Vector3();
+            anchor.group.matrix.decompose(pos, quat, scale);
+
+            const euler = new THREE.Euler().setFromQuaternion(quat);
+            const trackingData = {
+              id: i,
+              x: pos.x,
+              y: pos.y,
+              z: pos.z,
+              rx: THREE.MathUtils.radToDeg(euler.x),
+              ry: THREE.MathUtils.radToDeg(euler.y),
+              rz: THREE.MathUtils.radToDeg(euler.z),
+            };
+
+            // Send tracking data to Unity instance
+            if (unityInstance) {
+              unityInstance.SendMessage("WebARManager", "OnImageDetected", JSON.stringify(trackingData));
+            }
+          };
+        }
+
+        // Start the MindAR instance
+        await mindarThree.start();
+
+        // Set the animation loop for rendering
+        renderer.setAnimationLoop(() => {
+          renderer.render(scene, camera);
+        });
+      }
+    </script>
+  </body>
+</html>
