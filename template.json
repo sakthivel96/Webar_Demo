@@ -1,0 +1,7 @@
+{
+    "name": "Custom Fullscreen Template",
+    "description": "A custom WebGL template with fullscreen support.",
+    "fullscreen": true,
+    "background": "black",
+    "splashes": []
+}

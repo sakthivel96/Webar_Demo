@@ -1,116 +1,211 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Unity WebAR</title>
+<html lang="en-us">
 
-    <!-- Unity WebGL Loader -->
-    <script src="Build/WebAR.loader.js"></script>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unity Web Player | 360Web</title>
+  <link rel="stylesheet" href="TemplateData/style.css">
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: black;
+      height: 100%;
+      width: 100%;
+    }
 
-    <!-- Three.js -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+    #unity-container {
+      width: 100vw;
+      height: 100vh;
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
 
-    <!-- MindAR (make sure this loads before use) -->
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.4/dist/mindar-image-three.prod.js"></script>
+    #unity-canvas {
+      width: 100%;
+      height: 100%;
+      background-color: black;
+    }
 
-    <style>
-      html, body {
-        margin: 0;
-        overflow: hidden;
-        height: 100%;
-        width: 100%;
+    #preload-cover {
+      position: fixed;
+      width: 100vw;
+      height: 100vh;
+      background: black;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 9999;
+    }
+
+    #start-button {
+      padding: 15px 30px;
+      font-size: 18px;
+      background-color: gray;
+      color: black;
+      border: none;
+      cursor: not-allowed;
+      border-radius: 5px;
+      opacity: 0.5;
+      text-align: center;
+    }
+
+    #start-button.enabled {
+      background-color: #00ff00;
+      cursor: pointer;
+      opacity: 1;
+    }
+    #controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px;
+  border-radius: 5px;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#controls button, 
+#controls input {
+  padding: 10px;
+  font-size: 16px;
+  border: none;
+  border-radius: 5px;
+}
+
+#controls input {
+  width: 200px;
+}
+
+#controls button {
+  background-color: #00ff00;
+  color: black;
+  cursor: pointer;
+}
+
+#controls button:hover {
+  background-color: #00cc00;
+}
+
+  </style>
+</head>
+
+<body>
+  <div id="controls">
+    <button onclick="openRPM()">Create Avatar</button>
+    <input type="text" id="avatarUrl" placeholder="Paste your Avatar URL here">
+    <button onclick="copyAvatarLink()">Load Avatar</button>
+  </div>
+  <!-- <div id="preload-cover"> -->
+    <!-- <button id="start-button" disabled>Loading... 0%</button> -->
+  <!-- </div> -->
+
+  <div id="unity-container">
+    <canvas id="unity-canvas" width="960" height="600" tabindex="-1"></canvas>
+  </div>
+
+  <script>
+    var canvas = document.querySelector("#unity-canvas");
+    var startButton = document.getElementById("start-button");
+
+    var buildUrl = "Build";
+    var loaderUrl = buildUrl + "/Portfolio.loader.js";
+    var config = {
+      arguments: [],
+      dataUrl: buildUrl + "/Portfolio.data",
+      frameworkUrl: buildUrl + "/Portfolio.framework.js",
+      codeUrl: buildUrl + "/Portfolio.wasm",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "DefaultCompany",
+      productName: "PortfolioWeb",
+      productVersion: "0.1.0"
+    };
+
+    function openRPM() {
+      window.open("https://readyplayer.me/avatar", "_blank");
+    }
+
+    function copyAvatarLink() {
+      let avatarUrl = document.getElementById("avatarUrl").value;
+      if (avatarUrl) {
+        navigator.clipboard.writeText(avatarUrl).then(() => {
+          alert("Avatar link copied!");
+          SendMessageToUnity('AvatarLoader', 'ReceiveAvatarURL', avatarUrl);
+        }).catch(err => console.error('Error copying:', err));
+      } else {
+        alert("Please enter an avatar URL first.");
       }
+    }
 
-      #mindar-container {
-        position: absolute;
-        top: 0; left: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
+    function SendMessageToUnity(objectName, methodName, parameter) {
+      if (typeof unityInstance !== 'undefined') {
+        unityInstance.SendMessage(objectName, methodName, parameter);
+      } else {
+        console.error("Unity instance not found.");
       }
+    }
 
-      canvas {
-        width: 100% !important;
-        height: 100% !important;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="mindar-container">
-      <canvas id="unity-canvas"></canvas>
-    </div>
+    var script = document.createElement("script");
+    script.src = loaderUrl;
+    script.onload = () => {
+      createUnityInstance(canvas, config, (progress) => {
+        let percent = Math.round(progress * 100);
+        //startButton.innerText = `Loading... ${percent}%`;  // Update button text with progress
+      }).then((unityInstance) => {
+        window.unityInstance = unityInstance;
+        //document.querySelector("#preload-cover").style.display = "flex";
 
-    <script>
-      let unityInstance;
+        /*
+        // Enable Start button after loading
+        startButton.disabled = false;
+        startButton.innerText = "Start";
+        startButton.classList.add("enabled");
 
-      window.addEventListener('load', async () => {
-        // Initialize Unity WebGL
-        unityInstance = await createUnityInstance(document.querySelector("#unity-canvas"), {
-          dataUrl: "Build/WebAR.data",
-          frameworkUrl: "Build/WebAR.framework.js",
-          codeUrl: "Build/WebAR.wasm",
-        });
-
-        // Start MindAR once Unity is loaded
-        startMindAR();
+        startButton.onclick = () => {
+          enterFullScreen();
+          document.querySelector("#preload-cover").style.display = "none";
+        };
+        */
+        //checkOrientation();
+      }).catch((message) => {
+        alert(message);
       });
+    };
+    document.body.appendChild(script);
 
-      // Initialize MindAR
-      async function startMindAR() {
-        // Check if MindAR is loaded
-        if (!window.MINDAR || !window.MINDAR.IMAGE) {
-          console.error("MindAR not loaded or image tracking module unavailable!");
-          return;
-        }
-
-        // Initialize MindAR for image tracking
-        const mindarThree = new window.MINDAR.IMAGE.MindARThree({
-          container: document.querySelector("#mindar-container"),
-          imageTargetSrc: "./TargetFiles/targets.mind", // path to your .mind file
-        });
-
-        // Extract renderer, scene, and camera from MindAR instance
-        const { renderer, scene, camera } = mindarThree;
-
-        // Define number of image targets
-        const targetCount = 1; // Adjust for the number of targets in your .mind file
-        for (let i = 0; i < targetCount; i++) {
-          // Add anchor for each target
-          const anchor = mindarThree.addAnchor(i);
-
-          // Update target position and rotation
-          anchor.onTargetUpdate = () => {
-            const pos = new THREE.Vector3();
-            const quat = new THREE.Quaternion();
-            const scale = new THREE.Vector3();
-            anchor.group.matrix.decompose(pos, quat, scale);
-
-            const euler = new THREE.Euler().setFromQuaternion(quat);
-            const trackingData = {
-              id: i,
-              x: pos.x,
-              y: pos.y,
-              z: pos.z,
-              rx: THREE.MathUtils.radToDeg(euler.x),
-              ry: THREE.MathUtils.radToDeg(euler.y),
-              rz: THREE.MathUtils.radToDeg(euler.z),
-            };
-
-            // Send tracking data to Unity instance
-            if (unityInstance) {
-              unityInstance.SendMessage("WebARManager", "OnImageDetected", JSON.stringify(trackingData));
-            }
-          };
-        }
-
-        // Start the MindAR instance
-        await mindarThree.start();
-
-        // Set the animation loop for rendering
-        renderer.setAnimationLoop(() => {
-          renderer.render(scene, camera);
-        });
+    function enterFullScreen() {
+      if (canvas.requestFullscreen) {
+        canvas.requestFullscreen();
+      } else if (canvas.mozRequestFullScreen) {
+        canvas.mozRequestFullScreen();
+      } else if (canvas.webkitRequestFullscreen) {
+        canvas.webkitRequestFullscreen();
+      } else if (canvas.msRequestFullscreen) {
+        canvas.msRequestFullscreen();
       }
-    </script>
-  </body>
+    }
+
+    // function checkOrientation() {
+      // let isPortrait = window.innerHeight > window.innerWidth;
+      // let unityInstance = window.unityInstance || null;
+      // if (unityInstance) {
+        // unityInstance.SendMessage("UI_Manager", "OnOrientationChange", isPortrait ? "Portrait" : "Landscape");
+      // }
+    // }
+// 
+    // window.addEventListener("load", checkOrientation);
+    // window.addEventListener("resize", checkOrientation);
+    // window.addEventListener("orientationchange", checkOrientation);
+  </script>
+</body>
+
 </html>
